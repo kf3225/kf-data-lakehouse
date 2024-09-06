@@ -76,3 +76,37 @@
     trust-policy.jsonを削除します。
     セットアップが完了しました。
     ```
+
+## terraform tfstate用バケット作成
+
+### 概要
+
+- terraformでインフラを整備するにあたり、tfstateを格納するためのバケットを事前に用意する
+
+### 前提
+
+- S3を弄る権限のあるAccess Keyを取得できること
+
+### 手順
+
+1. AWSからAccess Keyを取得し環境変数へセットする
+
+    ```sh
+    export AWS_ACCESS_KEY_ID="文字列"
+    export AWS_SECRET_ACCESS_KEY="文字列"
+    export AWS_SESSION_TOKEN="文字列"
+    export AWS_REGION="ap-northeast-1"
+    ```
+
+2. S3バケットセットアップシェルを実行する
+
+    ```sh
+    $ ./create-tfstate-bucket.sh
+
+    AWS Account IDを取得中...
+    AWS Account ID: 111122223333
+    {
+        "Location": "http://kf-data-lakehouse-tfstate-111122223333.s3.amazonaws.com/"
+    }
+    Succeeded to create kf-data-lakehouse-tfstate-111122223333
+    ```
