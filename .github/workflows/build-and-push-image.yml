@@ -1,0 +1,85 @@
+name: Build and Push ECR Image
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'ingestion/**'
+      - 'transform/**'
+
+env:
+    AWS_REGION: ap-northeast-1
+    PROJECT_NAME: kf-data-lakehouse
+    USECASES: '["ingestion", "transform"]'
+
+jobs:
+  prepare_matrix:
+    runs-on: ubuntu-latest
+    outputs:
+      usecases: ${{ steps.generate_matrix.outputs.usecases }}
+    steps:
+      - name: Generate Matrix
+        id: generate_matrix
+        run: |
+          usecases="$(echo ${{ toJson(env.USECASES) }} | jq -c '.[]')"
+          echo "usecases=$usecases" >> $GITHUB_OUTPUT
+          cat $GITHUB_OUTPUT
+
+  build_and_push:
+    runs-on: ubuntu-latest
+    needs:
+      - prepare_matrix
+    strategy:
+      matrix:
+        usecase: ${{ fromJson(needs.prepare_matrix.outputs.usecases) }}
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Configure AWS credentials
+      uses: aws-actions/configure-aws-credentials@v4
+      with:
+        aws-region: ${{ env.AWS_REGION }}
+        role-to-assume: arn:aws:iam::${{ secrets.DATA_LAKEHOUSE_AWS_ACCOUNT_ID }}:role/GitHubActionsDeployRole
+
+    - name: Login to Amazon ECR
+      id: login_ecr
+      uses: aws-actions/amazon-ecr-login@v2
+
+    - name: Build and export Docker image
+      env:
+        ECR_REGISTRY: ${{ steps.login_ecr.outputs.registry }}
+        ECR_REPOSITORY: "${{ env.PROJECT_NAME }}-${{ matrix.usecase }}-repo"
+        IMAGE_TAG: ${{ github.sha }}
+      run: |
+        cd "${{ matrix.usecase }}"
+        docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG .
+        docker build -t ${{ matrix.usecase }}:${{ github.sha }} .
+        docker save ${{ matrix.usecase }}:${{ github.sha }} > image.tar
+
+    - name: Calculate image hash
+      id: hash
+      run: echo "image_hash=$(md5sum image.tar | awk '{ print $1 }')" >> $GITHUB_OUTPUT
+
+    - name: Check if image already exists
+      id: check_image
+      env:
+        ECR_REPOSITORY: "${{ matrix.usecase }}-repo"
+      run: |
+        if aws ecr describe-images --repository-name ${{ env.ECR_REPOSITORY }} --image-ids imageTag=${{ github.sha }} 2>/dev/null; then
+          echo "exists=true" >> $GITHUB_OUTPUT
+        else
+          echo "exists=false" >> $GITHUB_OUTPUT
+        fi
+
+    - name: Build, tag, and push image to Amazon ECR
+      if: steps.check_image.outputs.exists == 'false'
+      env:
+        ECR_REGISTRY: ${{ steps.login_ecr.outputs.registry }}
+        ECR_REPOSITORY: "${{ env.PROJECT_NAME }}-${{ matrix.usecase }}-repo"
+        IMAGE_TAG: ${{ github.sha }}
+      run: |
+        cd "${{ matrix.usecase }}"
+        docker tag $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG $ECR_REGISTRY/$ECR_REPOSITORY:latest
+        docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
+        docker push $ECR_REGISTRY/$ECR_REPOSITORY:latest
