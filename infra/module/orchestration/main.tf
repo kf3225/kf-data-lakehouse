@@ -204,7 +204,7 @@ resource "aws_sfn_state_machine" "sfn_state_machine" {
       ExtractDateFromContext = {
         Type = "Pass"
         Parameters = {
-          "target_date.$" = "States.Format('{}', $$.Execution.StartTime, 'yyyy-MM-dd')"
+          "target_date.$" = "States.ArrayGetItem(States.StringSplit($$.Execution.StartTime, 'T'), 0)"
         }
         Next = "Ingestion"
       }
