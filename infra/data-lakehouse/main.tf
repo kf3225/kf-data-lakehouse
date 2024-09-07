@@ -17,4 +17,5 @@ module "orchestration" {
   project_name      = var.project_name
   private_subnet_id = module.network.private_subnet_id
   bucket_name       = module.storage.bucket_name
+  usecases          = ["ingestion", "transform"]
 }
