@@ -1,0 +1,128 @@
+name: 'Terraform Destroy'
+
+on:
+  workflow_dispatch:
+
+env:
+  AWS_REGION: ap-northeast-1
+  ACCOUNTS: '
+    {
+      "data-lakehouse": "${{ secrets.DATA_LAKEHOUSE_AWS_ACCOUNT_ID }}",
+      "data-source": "${{ secrets.DATA_SOURCE_AWS_ACCOUNT_ID }}"
+    }
+    '
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  prepare_matrix:
+    runs-on: ubuntu-latest
+    outputs:
+      accounts: ${{ steps.generate-matrix.outputs.accounts }}
+    steps:
+      - name: Generate Matrix
+        id: generate-matrix
+        run: |
+          accounts="$(echo ${{ toJson(env.ACCOUNTS) }} | jq -c 'keys')"
+          echo "accounts=$accounts" >> $GITHUB_OUTPUT
+          cat $GITHUB_OUTPUT
+
+  terraform_plan:
+    needs: prepare_matrix
+    name: 'Terraform Plan'
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        account: ${{ fromJson(needs.prepare_matrix.outputs.accounts) }}
+    steps:
+    - name: Set account info
+      id: account_info
+      run: |
+        echo "name=${{ matrix.account }}" >> $GITHUB_OUTPUT
+        id=$(echo '${{ env.ACCOUNTS }}' | jq -r --arg key "${{ matrix.account }}" '.[$key]')
+        echo "id=$id" >> $GITHUB_OUTPUT
+        cat "$GITHUB_OUTPUT"
+
+    - name: Checkout
+      uses: actions/checkout@v4
+
+    - name: Configure AWS Credentials
+      uses: aws-actions/configure-aws-credentials@v4
+      with:
+        aws-region: ${{ env.AWS_REGION }}
+        role-to-assume: arn:aws:iam::${{ steps.account_info.outputs.id }}:role/GitHubActionsDeployRole
+
+    - name: Setup Terraform
+      uses: hashicorp/setup-terraform@v3
+
+    - name: Terraform Init
+      working-directory: infra/${{ steps.account_info.outputs.name }}
+      run: |
+        terraform init \
+          -backend-config="bucket=kf-data-lakehouse-tfstate-${{ steps.account_info.outputs.id }}" \
+          -backend-config="key=terraform.tfstate" \
+          -backend-config="region=${{ env.AWS_REGION }}"
+
+    - name: Terraform Plan
+      working-directory: infra/${{ steps.account_info.outputs.name }}
+      run: terraform plan -destroy -out=check.tfplan
+      env:
+        TF_VAR_region: ${{ env.AWS_REGION }}
+        TF_VAR_project_name: "kf-${{ steps.account_info.outputs.name }}"
+
+    - name: Upload Terraform Plan
+      uses: actions/upload-artifact@v4
+      with:
+        name: ${{ steps.account_info.outputs.name }}-plan
+        path: infra/${{ steps.account_info.outputs.name }}/check.tfplan
+
+  terraform_apply:
+    needs: [prepare_matrix, terraform_plan]
+    name: 'Terraform Destroy'
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        account: ${{ fromJson(needs.prepare_matrix.outputs.accounts) }}
+    steps:
+    - name: Set account info
+      id: account_info
+      run: |
+        echo "name=${{ matrix.account }}" >> $GITHUB_OUTPUT
+        id=$(echo '${{ env.ACCOUNTS }}' | jq -r --arg key "${{ matrix.account }}" '.[$key]')
+        echo "id=$id" >> $GITHUB_OUTPUT
+        cat "$GITHUB_OUTPUT"
+
+    - name: Checkout
+      uses: actions/checkout@v4
+
+    - name: Configure AWS Credentials
+      uses: aws-actions/configure-aws-credentials@v4
+      with:
+        aws-region: ${{ env.AWS_REGION }}
+        role-to-assume: arn:aws:iam::${{ steps.account_info.outputs.id }}:role/GitHubActionsDeployRole
+
+    - name: Setup Terraform
+      uses: hashicorp/setup-terraform@v3
+
+    - name: Terraform Init
+      working-directory: infra/${{ steps.account_info.outputs.name }}
+      run: |
+        terraform init \
+          -backend-config="bucket=kf-data-lakehouse-tfstate-${{ steps.account_info.outputs.id }}" \
+          -backend-config="key=terraform.tfstate" \
+          -backend-config="region=${{ env.AWS_REGION }}"
+
+    - name: Download Terraform Plan
+      uses: actions/download-artifact@v4
+      with:
+        name: ${{ steps.account_info.outputs.name }}-plan
+        path: infra/${{ steps.account_info.outputs.name }}
+
+    - name: Terraform Apply Destroy
+      working-directory: infra/${{ steps.account_info.outputs.name }}
+      run: terraform apply -destroy -auto-approve check.tfplan
+      env:
+        TF_VAR_region: ${{ env.AWS_REGION }}
+        TF_VAR_project_name: "kf-${{ steps.account_info.outputs.name }}"
