@@ -9,6 +9,7 @@ resource "aws_ecr_repository" "elt_repo" {
   for_each             = var.usecases
   name                 = "${var.project_name}-${each.value}-repo"
   image_tag_mutability = "MUTABLE"
+  force_delete         = true
 
   image_scanning_configuration {
     scan_on_push = true
