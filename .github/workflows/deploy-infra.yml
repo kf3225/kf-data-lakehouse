@@ -72,13 +72,13 @@ jobs:
 
     - name: Terraform Plan
       working-directory: infra/${{ steps.account_info.outputs.name }}
-      run: terraform plan -out=${{ steps.account_info.outputs.id }}.tfplan
+      run: terraform plan -out=check.tfplan
 
     - name: Upload Terraform Plan
       uses: actions/upload-artifact@v4
       with:
         name: ${{ steps.account_info.outputs.id }}-plan
-        path: infra/${{ steps.account_info.outputs.name }}/${{ steps.account_info.outputs.id }}.tfplan
+        path: infra/${{ steps.account_info.outputs.name }}/check.tfplan
 
   terraform_apply:
     needs: [prepare_matrix, terraform_plan]
@@ -125,4 +125,4 @@ jobs:
 
     - name: Terraform Apply
       working-directory: infra/${{ steps.account_info.outputs.name }}
-      run: terraform apply -auto-approve ${{ steps.account_info.outputs.id }}.tfplan
+      run: terraform apply -auto-approve check.tfplan
