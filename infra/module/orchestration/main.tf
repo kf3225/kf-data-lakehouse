@@ -128,7 +128,7 @@ resource "aws_ecs_task_definition" "transform" {
 
 # Step FunctionsがECSタスクを実行するためのIAMロール
 resource "aws_iam_role" "elt_statemachine" {
-  name = "step_functions_role"
+  name = "${var.project_name}-elt-workflow-role"
 
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
@@ -139,6 +139,40 @@ resource "aws_iam_role" "elt_statemachine" {
         Principal = {
           Service = "states.amazonaws.com"
         }
+      }
+    ]
+  })
+}
+
+# AWS アカウント ID を取得するためのデータソース
+data "aws_caller_identity" "current" {}
+
+# Step Functions が ECS タスクを実行するための IAM ポリシー
+resource "aws_iam_role_policy" "step_functions_ecs_policy" {
+  name = "${var.project_name}-step-functions-ecs-policy"
+  role = aws_iam_role.elt_statemachine.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = [
+          "ecs:RunTask",
+          "ecs:StopTask",
+          "ecs:DescribeTasks",
+          "iam:PassRole"
+        ]
+        Resource = "*"
+      },
+      {
+        Effect = "Allow"
+        Action = [
+          "events:PutTargets",
+          "events:PutRule",
+          "events:DescribeRule"
+        ]
+        Resource = "arn:aws:events:${var.region}:${data.aws_caller_identity.current.account_id}:rule/StepFunctionsGetEventsForECSTaskRule"
       }
     ]
   })
