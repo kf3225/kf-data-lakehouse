@@ -56,20 +56,23 @@ jobs:
         ECR_REGISTRY: ${{ steps.login_ecr.outputs.registry }}
         ECR_REPOSITORY: "${{ env.PROJECT_NAME }}-${{ matrix.usecase }}-repo"
         IMAGE_TAG: ${{ github.sha }}
+      working-directory: ${{ matrix.usecase }}
       run: |
-        cd "${{ matrix.usecase }}"
         docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG .
         docker build -t ${{ matrix.usecase }}:${{ github.sha }} .
         docker save ${{ matrix.usecase }}:${{ github.sha }} > image.tar
 
     - name: Calculate image hash
       id: hash
-      run: echo "image_hash=$(md5sum image.tar | awk '{ print $1 }')" >> $GITHUB_OUTPUT
+      working-directory: ${{ matrix.usecase }}
+      run: |
+        echo "image_hash=$(md5sum image.tar | awk '{ print $1 }')" >> $GITHUB_OUTPUT
 
     - name: Check if image already exists
       id: check_image
       env:
         ECR_REPOSITORY: "${{ matrix.usecase }}-repo"
+      working-directory: ${{ matrix.usecase }}
       run: |
         if aws ecr describe-images --repository-name ${{ env.ECR_REPOSITORY }} --image-ids imageTag=${{ github.sha }} 2>/dev/null; then
           echo "exists=true" >> $GITHUB_OUTPUT
@@ -83,8 +86,8 @@ jobs:
         ECR_REGISTRY: ${{ steps.login_ecr.outputs.registry }}
         ECR_REPOSITORY: "${{ env.PROJECT_NAME }}-${{ matrix.usecase }}-repo"
         IMAGE_TAG: ${{ github.sha }}
+      working-directory: ${{ matrix.usecase }}
       run: |
-        cd "${{ matrix.usecase }}"
         docker tag $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG $ECR_REGISTRY/$ECR_REPOSITORY:latest
         docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
         docker push $ECR_REGISTRY/$ECR_REPOSITORY:latest
