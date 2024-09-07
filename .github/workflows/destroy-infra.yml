@@ -37,6 +37,12 @@ jobs:
       matrix:
         account: ${{ fromJson(needs.prepare_matrix.outputs.accounts) }}
     steps:
+    - name: Check user
+      if: github.actor != 'kf3225'
+      run: |
+        echo "Error: Only 'kf3225' can run this workflow"
+        exit 1
+
     - name: Set account info
       id: account_info
       run: |
