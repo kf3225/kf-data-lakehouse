@@ -118,7 +118,7 @@ jobs:
           -backend-config="region=${{ env.AWS_REGION }}"
 
     - name: Download Terraform Plan
-      uses: actions/download-artifact@v2
+      uses: actions/download-artifact@v4
       with:
         name: ${{ steps.account_info.outputs.name }}-plan
         path: infra/${{ steps.account_info.outputs.name }}
