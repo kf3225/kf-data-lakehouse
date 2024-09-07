@@ -73,6 +73,9 @@ jobs:
     - name: Terraform Plan
       working-directory: infra/${{ steps.account_info.outputs.name }}
       run: terraform plan -out=check.tfplan
+      env:
+        TF_VAR_region: ${{ env.AWS_REGION }}
+        TF_VAR_project_name: "kf-${{ steps.account_info.outputs.name }}"
 
     - name: Upload Terraform Plan
       uses: actions/upload-artifact@v4
@@ -126,3 +129,6 @@ jobs:
     - name: Terraform Apply
       working-directory: infra/${{ steps.account_info.outputs.name }}
       run: terraform apply -auto-approve check.tfplan
+      env:
+        TF_VAR_region: ${{ env.AWS_REGION }}
+        TF_VAR_project_name: "kf-${{ steps.account_info.outputs.name }}"
