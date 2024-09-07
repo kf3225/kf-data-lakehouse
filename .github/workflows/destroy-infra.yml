@@ -1,12 +1,6 @@
-name: 'Terraform Deploy'
+name: 'Terraform Destroy'
 
 on:
-  push:
-    branches:
-      - main
-  pull_request:
-    branches:
-      - main
   workflow_dispatch:
 
 env:
@@ -44,10 +38,11 @@ jobs:
         account: ${{ fromJson(needs.prepare_matrix.outputs.accounts) }}
     steps:
     - name: Check user
-      if: github.event_name == 'workflow_dispatch' && github.actor != 'kf3225'
+      if: github.actor != 'kf3225'
       run: |
         echo "Error: Only 'kf3225' can run this workflow"
         exit 1
+
     - name: Set account info
       id: account_info
       run: |
@@ -78,7 +73,7 @@ jobs:
 
     - name: Terraform Plan
       working-directory: infra/${{ steps.account_info.outputs.name }}
-      run: terraform plan -out=check.tfplan
+      run: terraform plan -destroy -out=check.tfplan
       env:
         TF_VAR_region: ${{ env.AWS_REGION }}
         TF_VAR_project_name: "kf-${{ steps.account_info.outputs.name }}"
@@ -91,8 +86,7 @@ jobs:
 
   terraform_apply:
     needs: [prepare_matrix, terraform_plan]
-    name: 'Terraform Apply'
-    if: (github.ref == 'refs/heads/main' && github.event_name == 'push') || github.event_name == 'workflow_dispatch'
+    name: 'Terraform Destroy'
     runs-on: ubuntu-latest
     strategy:
       matrix:
@@ -132,9 +126,9 @@ jobs:
         name: ${{ steps.account_info.outputs.name }}-plan
         path: infra/${{ steps.account_info.outputs.name }}
 
-    - name: Terraform Apply
+    - name: Terraform Apply Destroy
       working-directory: infra/${{ steps.account_info.outputs.name }}
-      run: terraform apply -auto-approve check.tfplan
+      run: terraform apply -destroy -auto-approve check.tfplan
       env:
         TF_VAR_region: ${{ env.AWS_REGION }}
         TF_VAR_project_name: "kf-${{ steps.account_info.outputs.name }}"
